@@ -47,7 +47,7 @@ tienda-calzado
     ├── scripts
     │   └── dev.js
     ├── build
-    │   └── la_bodega.ico
+    │   └── myIco.ico
     └── package.json
 ```
 
@@ -73,13 +73,13 @@ npm run dev
 
 ## Variables de Entorno
 Backend (`backend/.env`):
-- `PORT` (ej. `4000`)
+- `PORT` (ej. `3000`)
 - `JWT_SECRET`
 - Conexion DB por `DATABASE_URL` o por:
 - `DB_USER`, `DB_HOST`, `DB_NAME`, `DB_PASSWORD`, `DB_PORT`
 
 Renderer (`desktop/renderer/.env`):
-- `VITE_API_URL` (ej. `http://localhost:4000/api`)
+- `VITE_API_URL` (ej. `http://localhost:3000/api`)
 
 ## Reglas Tecnicas Clave
 - No consumir API directo desde componentes: usar `desktop/renderer/src/services/transport.js`.
