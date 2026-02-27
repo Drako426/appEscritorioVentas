@@ -1,0 +1,32 @@
+# Secrets
+.env
+.env.*
+**/.env
+**/.env.*
+
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build / dist
+dist/
+build/
+desktop/dist/
+desktop/renderer/dist/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Databases / local files
+*.db
+*.sqlite
+*.sqlite3

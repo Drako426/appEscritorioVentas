@@ -1,0 +1,37 @@
+{
+  "name": "tienda-calzado",
+  "version": "1.0.0",
+  "author": "Juan Pablo",
+  "description": "Sistema de ventas - Tienda de Calzado",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "node scripts/dev.js",
+    "dev:renderer": "npm --prefix renderer run dev",
+    "dev:electron": "electron .",
+    "build:renderer": "npm --prefix renderer run build",
+    "build": "npm run build:renderer && electron-builder"
+  },
+  "build": {
+    "appId": "com.tiendacalzados.app",
+    "productName": "Tienda de Calzado",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*",
+      "renderer/dist/**/*"
+    ],
+    "win": {
+      "icon": "build/la_bodega.ico",
+      "target": "nsis"
+    }
+  },
+  "devDependencies": {
+    "electron": "^30.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "dependencies": {
+    "electron-store": "^11.0.2",
+    "idb": "^8.0.3"
+  }
+}
