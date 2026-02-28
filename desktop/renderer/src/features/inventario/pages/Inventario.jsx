@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useAuth } from "@/auth/useAuth"
+import { useModal } from "@/app/ModalProvider"
 import {
   createInventario,
   deleteInventario,
@@ -27,10 +28,14 @@ function crearNuevaFila(productoBase) {
 
 export default function Inventario() {
   const { user } = useAuth()
+  const { openModal } = useModal()
   const esAdmin = user?.role === "admin"
 
   const [productos, setProductos] = useState([])
   const [loading, setLoading] = useState(true)
+  const [filtroGeneral, setFiltroGeneral] = useState("")
+  const [filtroCodigo, setFiltroCodigo] = useState("")
+  const [filtroTalla, setFiltroTalla] = useState("")
 
   const [editId, setEditId] = useState(null)
   const [editData, setEditData] = useState({})
@@ -135,15 +140,20 @@ export default function Inventario() {
 
   const eliminar = async (id) => {
     if (!esAdmin) return
-    if (!window.confirm("Seguro que quieres eliminar este registro?")) return
-
-    try {
-      await deleteInventario(id)
-      await cargarInventario()
-      cancelar()
-    } catch (error) {
-      console.error("Error eliminando:", error)
-    }
+    openModal("confirmDialog", {
+      title: "Confirmar eliminacion",
+      message: "Seguro que quieres eliminar este registro?",
+      confirmText: "Eliminar",
+      onConfirm: async () => {
+        try {
+          await deleteInventario(id)
+          await cargarInventario()
+          cancelar()
+        } catch (error) {
+          console.error("Error eliminando:", error)
+        }
+      }
+    })
   }
 
   const agregarTalla = (productoBase) => {
@@ -155,6 +165,42 @@ export default function Inventario() {
     setEditData(nuevaFila)
   }
 
+  const productosFiltrados = useMemo(() => {
+    const general = String(filtroGeneral || "").trim().toLowerCase()
+    const codigo = String(filtroCodigo || "").trim().toLowerCase()
+    const talla = String(filtroTalla || "").trim().toLowerCase()
+
+    const tokens = general ? general.split(/\s+/).filter(Boolean) : []
+
+    const cumpleToken = (producto, token) => {
+      const nombre = String(producto.nombre || "").toLowerCase()
+      const codigoProducto = String(producto.codigo || "").toLowerCase()
+      const tallaProducto = String(producto.talla || "").toLowerCase()
+
+      // Convencion: "200x" => codigo que empiece por "200"
+      if (token.endsWith("x") && token.length > 1) {
+        return codigoProducto.startsWith(token.slice(0, -1))
+      }
+
+      return (
+        nombre.includes(token) ||
+        codigoProducto.includes(token) ||
+        tallaProducto.includes(token)
+      )
+    }
+
+    return productos.filter((producto) => {
+      const codigoProducto = String(producto.codigo || "").toLowerCase()
+      const tallaProducto = String(producto.talla || "").toLowerCase()
+
+      if (codigo && !codigoProducto.startsWith(codigo)) return false
+      if (talla && tallaProducto !== talla) return false
+      if (tokens.length > 0 && !tokens.every((token) => cumpleToken(producto, token))) return false
+
+      return true
+    })
+  }, [productos, filtroGeneral, filtroCodigo, filtroTalla])
+
   if (loading) {
     return <div>Cargando inventario...</div>
   }
@@ -162,6 +208,37 @@ export default function Inventario() {
   return (
     <div>
       <h1 className="text-xl font-bold mb-4">Inventario</h1>
+
+      <div className="mb-4 grid grid-cols-1 md:grid-cols-4 gap-3">
+        <input
+          value={filtroGeneral}
+          onChange={(e) => setFiltroGeneral(e.target.value)}
+          placeholder="Buscar (ej: negro 36 200x)"
+          className="border p-2 rounded"
+        />
+        <input
+          value={filtroCodigo}
+          onChange={(e) => setFiltroCodigo(e.target.value)}
+          placeholder="Codigo (prefijo)"
+          className="border p-2 rounded"
+        />
+        <input
+          value={filtroTalla}
+          onChange={(e) => setFiltroTalla(e.target.value)}
+          placeholder="Talla exacta"
+          className="border p-2 rounded"
+        />
+        <button
+          onClick={() => {
+            setFiltroGeneral("")
+            setFiltroCodigo("")
+            setFiltroTalla("")
+          }}
+          className="border rounded px-3 py-2"
+        >
+          Limpiar filtros
+        </button>
+      </div>
 
       {esAdmin && (
         <div className="mb-4 flex gap-3 items-center">
@@ -195,7 +272,7 @@ export default function Inventario() {
         </thead>
 
         <tbody>
-          {productos.map((p, index) => {
+          {productosFiltrados.map((p, index) => {
             const isEditing = (p.isNew && editData.isNew) || editId === p.id
 
             return (
@@ -304,6 +381,13 @@ export default function Inventario() {
               </tr>
             )
           })}
+          {productosFiltrados.length === 0 && (
+            <tr className="border-t text-center">
+              <td colSpan={esAdmin ? 8 : 7} className="py-4 text-gray-500">
+                No hay productos que coincidan con los filtros
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
     </div>

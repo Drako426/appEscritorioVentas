@@ -1,15 +1,17 @@
+import { useModal } from "@/app/ModalProvider"
+
 export default function CierreForm({ onGenerar }) {
+  const { openModal } = useModal()
 
   const handleSubmit = (e) => {
     e.preventDefault()
 
-    const confirmar = window.confirm(
-      "¿Seguro que deseas generar el cierre de caja?"
-    )
-
-    if (!confirmar) return
-
-    onGenerar()
+    openModal("confirmDialog", {
+      title: "Confirmar cierre",
+      message: "Seguro que deseas generar el cierre de caja?",
+      confirmText: "Generar",
+      onConfirm: () => onGenerar()
+    })
   }
 
   return (

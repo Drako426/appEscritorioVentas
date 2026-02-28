@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { getInventario } from "@/features/inventario/services/inventario.service"
 import { eventBus } from "@/utils/eventBus"
 import { EVENTS } from "@/utils/events"
 import { buscarClientePorCedula } from "@/services/clientes.service"
+import { useModal } from "@/app/ModalProvider"
+import { useCaja } from "@/context/useCaja"
 import {
   crearPrestamo,
   devolverPrestamo,
@@ -39,23 +41,22 @@ export default function PrestamoPage() {
   const [precio, setPrecio] = useState("")
   const [items, setItems] = useState([])
 
-  const [showModalPago, setShowModalPago] = useState(false)
-  const [efectivoPago, setEfectivoPago] = useState("")
-  const [transferenciaPago, setTransferenciaPago] = useState("")
-  const [procesandoPago, setProcesandoPago] = useState(false)
-
   const [alerta, setAlerta] = useState("")
+  const { openModal } = useModal()
+  const { cajaAbierta, loadingCaja } = useCaja()
   const codigoRef = useRef()
   const tallaRef = useRef()
   const cantidadRef = useRef()
   const precioRef = useRef()
+  const cedulaRef = useRef()
+  const nombreClienteRef = useRef()
 
-  const mostrarAlerta = (msg) => {
+  const mostrarAlerta = useCallback((msg) => {
     setAlerta(msg)
     setTimeout(() => setAlerta(""), 3500)
-  }
+  }, [])
 
-  const cargarInventario = async () => {
+  const cargarInventario = useCallback(async () => {
     try {
       const data = await getInventario()
       setInventario(data || [])
@@ -63,9 +64,9 @@ export default function PrestamoPage() {
       console.error(error)
       setInventario([])
     }
-  }
+  }, [])
 
-  const cargarPrestamos = async (term = buscar) => {
+  const cargarPrestamos = useCallback(async (term = "") => {
     try {
       setLoadingPrestamos(true)
       const data = await getPrestamosActivos(term)
@@ -76,12 +77,12 @@ export default function PrestamoPage() {
     } finally {
       setLoadingPrestamos(false)
     }
-  }
+  }, [mostrarAlerta])
 
   useEffect(() => {
     void cargarInventario()
     void cargarPrestamos("")
-  }, [])
+  }, [cargarInventario, cargarPrestamos])
 
   const buscarItemInventario = (codigoValue, tallaValue = null) => {
     const normalized = String(codigoValue ?? "").trim()
@@ -96,9 +97,6 @@ export default function PrestamoPage() {
     () => items.reduce((acc, item) => acc + toNumber(item.total), 0),
     [items]
   )
-
-  const pagoTotal = toNumber(efectivoPago) + toNumber(transferenciaPago)
-  const devolver = Math.max(pagoTotal - toNumber(detalle?.prestamo?.total), 0)
 
   const onCedulaBlur = async () => {
     const value = String(cedula).trim()
@@ -115,6 +113,11 @@ export default function PrestamoPage() {
       console.error(error)
       mostrarAlerta(error?.message || "Error buscando cliente")
     }
+  }
+
+  const onCedulaEnter = async () => {
+    await onCedulaBlur()
+    nombreClienteRef.current?.focus()
   }
 
   const onCodigoEnter = () => {
@@ -267,53 +270,70 @@ export default function PrestamoPage() {
 
   const confirmarDevolucion = async () => {
     if (!detalle?.prestamo?.id) return
-    if (!window.confirm("Confirmar devolucion completa del prestamo?")) return
-
-    try {
-      await devolverPrestamo(detalle.prestamo.id)
-      mostrarAlerta("Prestamo devuelto correctamente")
-      setDetalle(null)
-      await cargarInventario()
-      await cargarPrestamos("")
-    } catch (error) {
-      console.error(error)
-      mostrarAlerta(error?.message || "Error devolviendo prestamo")
-    }
+    openModal("confirmDialog", {
+      title: "Confirmar devolucion",
+      message: "Confirmar devolucion completa del prestamo?",
+      confirmText: "Devolver",
+      onConfirm: async () => {
+        try {
+          await devolverPrestamo(detalle.prestamo.id)
+          mostrarAlerta("Prestamo devuelto correctamente")
+          setDetalle(null)
+          await cargarInventario()
+          await cargarPrestamos("")
+        } catch (error) {
+          console.error(error)
+          mostrarAlerta(error?.message || "Error devolviendo prestamo")
+        }
+      }
+    })
   }
 
   const abrirPago = () => {
     if (!detalle?.prestamo) return
-    setEfectivoPago(String(detalle.prestamo.total))
-    setTransferenciaPago("0")
-    setShowModalPago(true)
+    const prestamoId = detalle.prestamo.id
+    const total = toNumber(detalle.prestamo.total)
+
+    openModal("prestamoPago", {
+      prestamoId,
+      total,
+      initialEfectivo: String(total),
+      initialTransferencia: "0",
+      onConfirm: async ({ efectivo, transferencia }) => {
+        const ok = await confirmarPago({
+          prestamoId,
+          total,
+          efectivo,
+          transferencia
+        })
+        return ok
+      }
+    })
   }
 
-  const confirmarPago = async () => {
-    if (!detalle?.prestamo?.id) return
-
-    const total = toNumber(detalle.prestamo.total)
+  const confirmarPago = async ({ prestamoId, total, efectivo = 0, transferencia = 0 }) => {
+    if (!prestamoId) return false
+    const pagoTotal = toNumber(efectivo) + toNumber(transferencia)
     if (pagoTotal < total) {
       mostrarAlerta("Pago insuficiente")
-      return
+      return false
     }
 
     try {
-      setProcesandoPago(true)
-      const data = await pagarPrestamo(detalle.prestamo.id, {
-        efectivo: toNumber(efectivoPago),
-        transferencia: toNumber(transferenciaPago)
+      const data = await pagarPrestamo(prestamoId, {
+        efectivo: toNumber(efectivo),
+        transferencia: toNumber(transferencia)
       })
 
       eventBus.emit(EVENTS.VENTA_REGISTRADA, data)
       mostrarAlerta("Prestamo pagado correctamente")
-      setShowModalPago(false)
       setDetalle(null)
       await cargarPrestamos("")
+      return true
     } catch (error) {
       console.error(error)
       mostrarAlerta(error?.message || "Error pagando prestamo")
-    } finally {
-      setProcesandoPago(false)
+      return false
     }
   }
 
@@ -375,6 +395,19 @@ export default function PrestamoPage() {
     win.print()
   }
 
+  if (loadingCaja) {
+    return <div className="p-6">Verificando sesion de caja...</div>
+  }
+
+  if (!cajaAbierta) {
+    return (
+      <div className="p-10 text-center">
+        <h2 className="text-2xl font-bold">Caja cerrada</h2>
+        <p className="mt-2">Debes abrir una sesion de caja antes de gestionar prestamos.</p>
+      </div>
+    )
+  }
+
   return (
     <div className="p-6 space-y-6">
       <h1 className="text-2xl font-bold">Prestamos</h1>
@@ -388,15 +421,29 @@ export default function PrestamoPage() {
           <input
             className="border p-2 rounded"
             placeholder="Cedula"
+            ref={cedulaRef}
             value={cedula}
             onChange={(e) => setCedula(e.target.value)}
             onBlur={() => void onCedulaBlur()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault()
+                void onCedulaEnter()
+              }
+            }}
           />
           <input
             className="border p-2 rounded"
             placeholder="Nombre cliente"
+            ref={nombreClienteRef}
             value={nombreCliente}
             onChange={(e) => setNombreCliente(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault()
+                codigoRef.current?.focus()
+              }
+            }}
           />
         </div>
 
@@ -517,12 +564,12 @@ export default function PrestamoPage() {
             value={buscar}
             onChange={(e) => setBuscar(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") void cargarPrestamos()
+              if (e.key === "Enter") void cargarPrestamos(buscar)
             }}
           />
           <button
             className="bg-gray-700 text-white px-4 rounded"
-            onClick={() => void cargarPrestamos()}
+            onClick={() => void cargarPrestamos(buscar)}
           >
             Buscar
           </button>
@@ -628,62 +675,6 @@ export default function PrestamoPage() {
         )}
       </section>
 
-      {showModalPago && detalle?.prestamo && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white w-full max-w-md p-6 rounded shadow-lg">
-            <h3 className="text-lg font-semibold mb-3">Pagar prestamo #{detalle.prestamo.id}</h3>
-
-            <div className="mb-3">
-              <div className="text-sm text-gray-600">Total</div>
-              <div className="text-2xl font-bold">${formatMoney(detalle.prestamo.total)}</div>
-            </div>
-
-            <div className="mb-3">
-              <label className="block text-sm mb-1">Efectivo</label>
-              <input
-                type="number"
-                min="0"
-                value={efectivoPago}
-                onChange={(e) => setEfectivoPago(e.target.value)}
-                className="w-full border p-2 rounded"
-              />
-            </div>
-
-            <div className="mb-3">
-              <label className="block text-sm mb-1">Transferencia</label>
-              <input
-                type="number"
-                min="0"
-                value={transferenciaPago}
-                onChange={(e) => setTransferenciaPago(e.target.value)}
-                className="w-full border p-2 rounded"
-              />
-            </div>
-
-            <div className="mb-5">
-              <div className="text-sm text-gray-600">Devolver</div>
-              <div className="text-xl font-semibold">${formatMoney(devolver)}</div>
-            </div>
-
-            <div className="flex justify-end gap-2">
-              <button
-                className="px-4 py-2 border rounded"
-                onClick={() => setShowModalPago(false)}
-                disabled={procesandoPago}
-              >
-                Cancelar
-              </button>
-              <button
-                className="px-4 py-2 bg-green-600 text-white rounded disabled:opacity-60"
-                onClick={() => void confirmarPago()}
-                disabled={procesandoPago}
-              >
-                {procesandoPago ? "Confirmando..." : "Confirmar pago"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

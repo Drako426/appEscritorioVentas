@@ -1,25 +1,21 @@
 import { useEffect, useState } from "react"
-import { getDetalleCierre } from "../services/historial.service"
+import BaseModal from "./BaseModal"
+import { getDetalleCierre } from "@/features/historial/services/historial.service"
 
-export default function DetalleCierreModal({ cierreId, onClose }) {
-
+export default function HistorialDetalleCierreModal({ cierreId, onClose }) {
   const [ventas, setVentas] = useState([])
   const [cierre, setCierre] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-
     if (!cierreId) return
 
     const fetchDetalle = async () => {
       try {
         setLoading(true)
-
         const data = await getDetalleCierre(cierreId)
-
         setCierre(data.cierre)
         setVentas(data.ventas)
-
       } catch (error) {
         console.error("Error cargando detalle:", error)
       } finally {
@@ -27,16 +23,14 @@ export default function DetalleCierreModal({ cierreId, onClose }) {
       }
     }
 
-    fetchDetalle()
-
+    void fetchDetalle()
   }, [cierreId])
 
   if (!cierreId) return null
 
   return (
-    <div style={overlayStyle}>
+    <BaseModal onClose={onClose}>
       <div style={modalStyle}>
-
         <h3>Detalle del Cierre</h3>
 
         <button onClick={onClose} style={{ marginBottom: "10px" }}>
@@ -73,16 +67,10 @@ export default function DetalleCierreModal({ cierreId, onClose }) {
                 ) : (
                   ventas.map((item, index) => (
                     <tr key={index}>
-                      <td>
-                        {new Date(item.fecha).toLocaleString("es-CO")}
-                      </td>
-
+                      <td>{new Date(item.fecha).toLocaleString("es-CO")}</td>
                       <td>{item.nombre_producto}</td>
-
                       <td>{item.talla}</td>
-
                       <td>{item.cantidad}</td>
-
                       <td>
                         {Number(item.precio).toLocaleString("es-CO", {
                           style: "currency",
@@ -97,25 +85,9 @@ export default function DetalleCierreModal({ cierreId, onClose }) {
             </table>
           </>
         )}
-
       </div>
-    </div>
+    </BaseModal>
   )
-}
-
-/* ================= ESTILOS ================= */
-
-const overlayStyle = {
-  position: "fixed",
-  top: 0,
-  left: 0,
-  width: "100%",
-  height: "100%",
-  background: "rgba(0,0,0,0.5)",
-  display: "flex",
-  justifyContent: "center",
-  alignItems: "center",
-  zIndex: 1000
 }
 
 const modalStyle = {

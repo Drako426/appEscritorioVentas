@@ -1,14 +1,14 @@
 import { useEffect, useState } from "react"
+import { useModal } from "@/app/ModalProvider"
 import { getHistorialCierres } from "../services/historial.service"
 import HistorialTable from "../components/HistorialTable"
-import DetalleCierreModal from "../components/DetalleCierreModal"
 
 export default function HistorialPage() {
 
   const [cierres, setCierres] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [cierreSeleccionado, setCierreSeleccionado] = useState(null)
+  const { openModal } = useModal()
 
   const fetchHistorial = async () => {
     try {
@@ -24,7 +24,7 @@ export default function HistorialPage() {
   }
 
     const handleVerDetalle = (id) => {
-    setCierreSeleccionado(id)
+    openModal("detalleCierre", { cierreId: id })
   }
 
   useEffect(() => {
@@ -43,10 +43,6 @@ export default function HistorialPage() {
       <HistorialTable
         cierres={cierres}
         onVerDetalle={handleVerDetalle}
-      />
-      <DetalleCierreModal
-        cierreId={cierreSeleccionado}
-        onClose={() => setCierreSeleccionado(null)}
       />
     </div>
   )

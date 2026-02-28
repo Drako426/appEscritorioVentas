@@ -87,6 +87,19 @@ Renderer (`desktop/renderer/.env`):
 - Navegacion SPA: usar `Link` / `NavLink`, no `<a href>`.
 - Autenticacion: JWT por `Authorization: Bearer <token>`.
 
+## Cambios Recientes (UI/Flujo)
+- Sistema global de modales en renderer:
+  - `desktop/renderer/src/app/ModalProvider.jsx`
+  - `desktop/renderer/src/app/ModalRoot.jsx`
+  - Render por `createPortal(..., document.body)` para overlays reales.
+- Modales migrados a `desktop/renderer/src/components/ui/modal/`:
+  - `ConfirmPasswordModal`, `ConfirmDialogModal`, `VentaPagoModal`,
+  - `VentaBuscadorModal`, `PrestamoPagoModal`, `HistorialDetalleCierreModal`.
+- Navegacion principal movida a barra superior tipo pestañas (workspace persistente).
+- Prestamos ahora respeta estado de caja (bloquea cuando caja cerrada, igual que ventas).
+- Pago (venta/prestamo): calculo de "Devolver" en tiempo real y puede ser negativo cuando falta dinero.
+- Inventario: buscador multi-parametro (general + prefijo de codigo + talla exacta).
+
 ## Flujo Offline (Ventas)
 - Encola solo `POST /ventas` cuando no hay conexion con backend.
 - Cola persistida en Electron Store (`offline-ventas`).

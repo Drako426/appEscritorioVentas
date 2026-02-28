@@ -5,6 +5,7 @@ import { buscarClientePorCedula } from "@/services/clientes.service"
 import { eventBus } from "@/utils/eventBus"
 import { EVENTS } from "@/utils/events"
 import { useCaja } from "@/context/useCaja"
+import { useModal } from "@/app/ModalProvider"
 
 export default function Ventas() {
   const [inventario, setInventario] = useState([])
@@ -15,23 +16,19 @@ export default function Ventas() {
   const [precio, setPrecio] = useState("")
   const [carrito, setCarrito] = useState([])
   const [alerta, setAlerta] = useState(null)
-  const [mostrarModalPago, setMostrarModalPago] = useState(false)
-  const [efectivoPago, setEfectivoPago] = useState("")
-  const [transferenciaPago, setTransferenciaPago] = useState("")
-  const [guardandoVenta, setGuardandoVenta] = useState(false)
+  const [, setGuardandoVenta] = useState(false)
   const { cajaAbierta, loadingCaja } = useCaja()
+  const { openModal, closeModal } = useModal()
 
   const [cedulaCliente, setCedulaCliente] = useState("")
   const [nombreCliente, setNombreCliente] = useState("")
-
-  const [mostrarBuscador, setMostrarBuscador] = useState(false)
-  const [busqueda, setBusqueda] = useState("")
-  const [indiceSeleccionado, setIndiceSeleccionado] = useState(0)
 
   const codigoRef = useRef()
   const tallaRef = useRef()
   const cantidadRef = useRef()
   const precioRef = useRef()
+  const cedulaRef = useRef()
+  const nombreClienteRef = useRef()
 
   const normalizarCodigo = (value) => String(value ?? "").trim()
 
@@ -65,50 +62,25 @@ export default function Ventas() {
     const handleKeyDown = (e) => {
       if (e.ctrlKey && e.key === "a") {
         e.preventDefault()
-        setMostrarBuscador(true)
+        openModal("buscador", {
+          inventario,
+          onSelect: (seleccionado) => {
+            setCodigo(String(seleccionado?.codigo ?? ""))
+            setNombre(seleccionado?.nombre ?? "")
+            setTalla(seleccionado?.talla ?? "")
+            codigoRef.current?.focus()
+          }
+        })
       }
     }
 
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [])
+  }, [inventario, openModal])
 
   const mostrarAlerta = (mensaje) => {
     setAlerta(mensaje)
     setTimeout(() => setAlerta(null), 4000)
-  }
-
-  const resultados = inventario.filter(
-    (p) =>
-      p.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
-      String(p.codigo).includes(busqueda)
-  )
-
-  const handleBuscadorKeys = (e) => {
-    if (e.key === "ArrowDown") {
-      setIndiceSeleccionado((prev) => (prev < resultados.length - 1 ? prev + 1 : prev))
-    }
-
-    if (e.key === "ArrowUp") {
-      setIndiceSeleccionado((prev) => (prev > 0 ? prev - 1 : prev))
-    }
-
-    if (e.key === "Enter") {
-      const seleccionado = resultados[indiceSeleccionado]
-      if (!seleccionado) return
-
-      setCodigo(String(seleccionado.codigo ?? ""))
-      setNombre(seleccionado.nombre)
-      setTalla(seleccionado.talla)
-
-      setMostrarBuscador(false)
-      setBusqueda("")
-      codigoRef.current?.focus()
-    }
-
-    if (e.key === "Escape") {
-      setMostrarBuscador(false)
-    }
   }
 
   const onCedulaBlur = async () => {
@@ -124,6 +96,11 @@ export default function Ventas() {
       console.error(error)
       mostrarAlerta(error?.message || "Error buscando cliente")
     }
+  }
+
+  const onCedulaEnter = async () => {
+    await onCedulaBlur()
+    nombreClienteRef.current?.focus()
   }
 
   const handleCodigo = (e) => {
@@ -217,11 +194,6 @@ export default function Ventas() {
   }
 
   const totalGeneral = carrito.reduce((acc, item) => acc + item.total, 0)
-  const efectivoNumero = Number(efectivoPago) || 0
-  const transferenciaNumero = Number(transferenciaPago) || 0
-  const totalPagado = efectivoNumero + transferenciaNumero
-  const devolver = Math.max(totalPagado - totalGeneral, 0)
-
   const abrirModalPago = () => {
     if (carrito.length === 0) {
       mostrarAlerta("No hay productos en el carrito")
@@ -238,15 +210,25 @@ export default function Ventas() {
       return
     }
 
-    setEfectivoPago(String(totalGeneral))
-    setTransferenciaPago("0")
-    setMostrarModalPago(true)
+    openModal("pago", {
+      totalGeneral,
+      initialEfectivo: String(totalGeneral),
+      initialTransferencia: "0",
+      onConfirm: async ({ efectivo, transferencia }) => {
+        const ok = await guardarVenta({ efectivo, transferencia })
+        if (ok) closeModal()
+      }
+    })
   }
 
-  const guardarVenta = async () => {
+  const guardarVenta = async ({ efectivo = 0, transferencia = 0 } = {}) => {
+    const efectivoNumero = Number(efectivo) || 0
+    const transferenciaNumero = Number(transferencia) || 0
+    const totalPagado = efectivoNumero + transferenciaNumero
+
     if (totalPagado < totalGeneral) {
       mostrarAlerta("El pago es menor al total de la compra")
-      return
+      return false
     }
 
     try {
@@ -258,7 +240,7 @@ export default function Ventas() {
 
       if (!user || !user.id) {
         mostrarAlerta("Sesion invalida")
-        return
+        return false
       }
 
       const payload = {
@@ -285,16 +267,15 @@ export default function Ventas() {
       )
 
       setCarrito([])
-      setMostrarModalPago(false)
-      setEfectivoPago("")
-      setTransferenciaPago("")
 
       if (!venta?.offline) {
         await cargarInventario()
       }
+      return true
     } catch (error) {
       console.error("Error backend:", error)
       mostrarAlerta(error?.message || "Error registrando venta")
+      return false
     } finally {
       setGuardandoVenta(false)
     }
@@ -326,15 +307,29 @@ export default function Ventas() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-4">
         <input
+          ref={cedulaRef}
           value={cedulaCliente}
           onChange={(e) => setCedulaCliente(e.target.value)}
           onBlur={() => void onCedulaBlur()}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault()
+              void onCedulaEnter()
+            }
+          }}
           placeholder="Cedula cliente"
           className="border p-2 rounded"
         />
         <input
+          ref={nombreClienteRef}
           value={nombreCliente}
           onChange={(e) => setNombreCliente(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault()
+              codigoRef.current?.focus()
+            }
+          }}
           placeholder="Nombre cliente"
           className="border p-2 rounded"
         />
@@ -430,88 +425,6 @@ export default function Ventas() {
         </button>
       </div>
 
-      {mostrarBuscador && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-          <div className="bg-white w-2/3 p-6 rounded shadow-lg">
-            <input
-              autoFocus
-              value={busqueda}
-              onChange={(e) => setBusqueda(e.target.value)}
-              onKeyDown={handleBuscadorKeys}
-              placeholder="Buscar producto..."
-              className="w-full border p-2 mb-4 rounded"
-            />
-
-            <div className="max-h-80 overflow-y-auto">
-              {resultados.map((item, index) => (
-                <div
-                  key={index}
-                  className={`p-2 cursor-pointer ${index === indiceSeleccionado ? "bg-blue-200" : ""}`}
-                >
-                  <div className="flex justify-between">
-                    <span>{item.nombre}</span>
-                    <span>Talla: {item.talla}</span>
-                    <span>Stock: {item.stock_actual}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {mostrarModalPago && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-          <div className="bg-white w-full max-w-md p-6 rounded shadow-lg">
-            <h3 className="text-xl font-bold mb-4">Confirmar pago</h3>
-
-            <div className="mb-3">
-              <div className="text-sm text-gray-600">Total compra</div>
-              <div className="text-2xl font-bold">${totalGeneral.toLocaleString()}</div>
-            </div>
-
-            <div className="mb-3">
-              <label className="block text-sm mb-1">Efectivo</label>
-              <input
-                type="number"
-                min="0"
-                value={efectivoPago}
-                onChange={(e) => setEfectivoPago(e.target.value)}
-                className="w-full border p-2 rounded"
-              />
-            </div>
-
-            <div className="mb-3">
-              <label className="block text-sm mb-1">Transferencia</label>
-              <input
-                type="number"
-                min="0"
-                value={transferenciaPago}
-                onChange={(e) => setTransferenciaPago(e.target.value)}
-                className="w-full border p-2 rounded"
-              />
-            </div>
-
-            <div className="mb-5">
-              <div className="text-sm text-gray-600">Devolver</div>
-              <div className="text-xl font-semibold">${devolver.toLocaleString()}</div>
-            </div>
-
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setMostrarModalPago(false)} className="px-4 py-2 border rounded">
-                Cancelar
-              </button>
-              <button
-                onClick={() => void guardarVenta()}
-                disabled={guardandoVenta}
-                className="bg-green-600 text-white px-4 py-2 rounded disabled:opacity-60"
-              >
-                {guardandoVenta ? "Confirmando..." : "Confirmar"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

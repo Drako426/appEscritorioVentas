@@ -67,11 +67,25 @@ Bridge expuesto por `electron/preload.js` en `window.electron`:
 
 ## Renderer: organizacion funcional
 - `app/router.jsx`: rutas y proteccion por rol (`admin`, `vendedor`)
+- `app/ModalProvider.jsx` + `app/ModalRoot.jsx`: sistema global de modales (portal)
 - `auth/*`: login, contexto auth, guards
 - `context/CajaContext.jsx`: estado global de sesion de caja
 - `features/*`: modulos por dominio
 - `services/*`: capa de acceso a API
 - `offline/*`: cache local
+
+## Sistema de Modales (Global)
+- Todos los modales deben abrirse con `openModal(name, props)` desde `useModal()`.
+- Renderizado centralizado en `ModalRoot` con `createPortal` a `document.body`.
+- Base visual compartida en `renderer/src/components/ui/modal/BaseModal.jsx`.
+- Modales actuales:
+  - `ConfirmPasswordModal`
+  - `ConfirmDialogModal`
+  - `VentaPagoModal`
+  - `VentaBuscadorModal`
+  - `PrestamoPagoModal`
+  - `HistorialDetalleCierreModal`
+- Regla: no renderizar modales inline en pages/features.
 
 ## Conexion API
 - Cliente en `renderer/src/services/api.js`.
@@ -98,10 +112,22 @@ Bridge expuesto por `electron/preload.js` en `window.electron`:
 
 ## Roles y navegacion
 - Roles declarados en `renderer/src/auth/roles.js`: `admin`, `vendedor`.
+- Navegacion principal en `Header` con tabs persistentes (estilo workspace).
 
 Rutas protegidas por `ProtectedRoute`:
 - Admin: dashboard, inventario, venta, informes, cierre, historial.
 - Vendedor: venta, inventario, cierre, historial.
+
+## Cambios Funcionales Recientes
+- Prestamos depende de sesion de caja (si caja cerrada, vista bloqueada).
+- Pago en venta/prestamo:
+  - El valor "Devolver" se calcula en tiempo real.
+  - Puede mostrar valor negativo cuando el pago es insuficiente.
+- Inventario:
+  - Filtro general por multiples terminos.
+  - Filtro por prefijo de codigo.
+  - Filtro por talla exacta.
+  - Convencion `200x` en busqueda general = codigos que empiezan por `200`.
 
 ## CSP
 En `renderer/index.html`:
